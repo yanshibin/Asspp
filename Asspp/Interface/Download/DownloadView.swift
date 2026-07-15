@@ -8,27 +8,41 @@
 import SwiftUI
 
 struct DownloadView: View {
-    @StateObject var vm = Downloads.this
+    @State private var vm = Downloads.this
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             content
-                .navigationTitle("Download")
+                .navigationTitle("Downloads")
         }
-        .navigationViewStyle(.stack)
     }
 
-    var content: some View {
-        List {
-            if vm.requests.isEmpty {
-                Section("Packages") {
-                    Text("Sorry, nothing here.")
-                }
+    private var content: some View {
+        Group {
+            if vm.manifests.isEmpty {
+                ContentUnavailableView(
+                    label: {
+                        Label("No Downloads", systemImage: "arrow.down.circle")
+                    },
+                    description: {
+                        Text("Search for an app or add a download link to get started.")
+                    },
+                    actions: {
+                        NavigationLink("Add Download") {
+                            AddDownloadView()
+                        }
+                    },
+                )
+                .padding()
             } else {
-                Section("Packages") {
+                Form {
                     packageList
                 }
             }
+        }
+        .formStyle(.grouped)
+        .navigationDestination(for: PackageManifest.self) { manifest in
+            PackageView(pkg: manifest)
         }
         .toolbar {
             NavigationLink(destination: AddDownloadView()) {
@@ -37,74 +51,67 @@ struct DownloadView: View {
         }
     }
 
-    var packageList: some View {
-        ForEach(vm.requests) { req in
-            NavigationLink(destination: PackageView(request: req)) {
-                VStack(spacing: 8) {
-                    ArchivePreviewView(archive: req.package)
-                    SimpleProgress(progress: req.runtime.progress)
-                        .animation(.interactiveSpring, value: req.runtime.progress)
-                    HStack {
-                        Text(req.hint)
-                        Spacer()
-                        Text(req.creation.formatted())
-                    }
-                    .font(.system(.footnote, design: .rounded))
-                    .foregroundStyle(.secondary)
+    private var packageList: some View {
+        ForEach(vm.manifests, id: \.id) { req in
+            PackageManifestRow(manifest: req)
+        }
+    }
+}
+
+private struct PackageManifestRow: View {
+    let manifest: PackageManifest
+    @State private var vm = Downloads.this
+
+    var body: some View {
+        NavigationLink(value: manifest) {
+            VStack(spacing: 8) {
+                ArchivePreviewView(archive: manifest.package)
+                SimpleProgress(progress: manifest.state.percent)
+                    .animation(.interactiveSpring, value: manifest.state.percent)
+                HStack {
+                    Text(manifest.hint)
+                    Spacer()
+                    Text(manifest.creation.formatted())
                 }
+                .font(.system(.footnote, design: .rounded))
+                .foregroundStyle(.secondary)
             }
-            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                if vm.isCompleted(for: req) {
-                } else {
-                    switch req.runtime.status {
-                    case .stopped:
-                        Button {
-                            vm.resume(requestID: req.id)
-                        } label: {
-                            Label("Resume", systemImage: "play.fill")
-                        }
-                    case .pending, .downloading:
-                        Button {
-                            vm.suspend(requestID: req.id)
-                        } label: {
-                            Label("Puase", systemImage: "stop.fill")
-                        }
-                    default: Group {}
-                    }
-                }
-            }
-            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                Button(role: .destructive) {
-                    vm.delete(request: req)
+        }
+        .contextMenu {
+            let actions = vm.getAvailableActions(for: manifest)
+            ForEach(actions, id: \.self) { action in
+                let label = vm.getActionLabel(for: action)
+                Button(role: label.isDestructive ? .destructive : .none) {
+                    vm.performDownloadAction(for: manifest, action: action)
                 } label: {
-                    Label("Cancel", systemImage: "trash")
+                    Label(label.title, systemImage: label.systemImage)
                 }
             }
         }
     }
 }
 
-extension Downloads.Request {
+extension PackageManifest {
     var hint: String {
-        if let error = runtime.error {
+        if let error = state.error {
             return error
         }
-        return switch runtime.status {
-        case .stopped:
-            NSLocalizedString("Suspended", comment: "")
+        return switch state.status {
         case .pending:
-            NSLocalizedString("Pending...", comment: "")
+            String(localized: "Pending...")
         case .downloading:
             [
-                String(Int(runtime.progress.fractionCompleted * 100)) + "%",
-                runtime.speed.isEmpty ? "" : runtime.speed + "/s",
+                String(Int(state.percent * 100)) + "%",
+                state.speed.isEmpty ? "" : state.speed + "/s",
             ]
-            .compactMap { $0 }
+            .compactMap(\.self)
             .joined(separator: " ")
-        case .verifying:
-            NSLocalizedString("Verifying...", comment: "")
+        case .paused:
+            String(localized: "Paused")
         case .completed:
-            NSLocalizedString("Completed", comment: "")
+            String(localized: "Completed")
+        case .failed:
+            String(localized: "Failed")
         }
     }
 }

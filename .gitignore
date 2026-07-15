@@ -9,6 +9,7 @@
 *.dSYM.zip
 *.hmap
 *.ipa
+*.tipa
 *.lcov
 *.lock
 *.log
@@ -43,6 +44,7 @@
 .bundle
 .cache
 .cache/
+.claude/
 .com.apple.timemachine.donotpresent
 .dynamodb/
 .env
@@ -121,3 +123,9 @@ xcuserdata/
 yarn-debug.log*
 yarn-error.log*
 
+# Developer-specific xcconfig (required but gitignored)
+Configuration/Developer.xcconfig
+
+References/
+
+Foundation/ApplePackage/

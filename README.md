@@ -1,84 +1,90 @@
 # Asspp
 
-The App Store for your multi-account eco system.
+**The Ultimate Multi-Region App Store Manager.**
+
+Asspp is a powerful client designed for users who need to manage **multiple Apple IDs** across **different countries and regions**. Switch stores instantly, download apps from anywhere, and manage your IPA library—all without logging out of your device.
 
 [简体中文 🇨🇳](./Resources/i18n/zh-Hans/README.md)
 
-**Archived due to stable, no tech support will be provided. Fix any issue yourself.**
+![Preview](./Resources/Screenshots/Apptisan_Asspp.png)
 
-**Due to huge amount of installation, the MZBuy endpoint used to purchase free apps is now banned by Apple. No update will be provided to fix this.**
+## ✨ Why Asspp?
 
-## 👀 Preview
+- **🌍 Multi-Region Access**: Browse and search the US, Japan, China, or any other App Store region seamlessly. No more switching system accounts just to check an app.
+- **👥 Multi-Account Support**: Add unlimited Apple IDs. Asspp automatically uses the correct account for the store you are browsing.
+- **📦 IPA Management**: Download official, signed IPAs directly from Apple's servers for backup or sideloading.
+- **⏪ History Versions**: Need an older version of an app? Asspp makes it easy to find and download previous releases.
+- **📱 Cross-Platform**: Native experience on both **iOS** and **macOS**.
 
-![Screenshot](./Resources/Screenshots/Screenshot-0.png)
+## 📥 Installation
 
-## 🌟 Key Features
+### iOS
 
-- [x] multiple account support
-- [x] select App Store region
-- [x] search for apps with keywords
-- [x] download apps from App Store
-- [x] install ipa file on device without jailbroken
-- [x] share ipa file
-- [x] purchase free apps
-- [x] supports TrollStore if you had one
+#### Option 1: Auto-Build & Sign (Recommended)
 
-Due to technical reasons, installer will stop work after 2025/5/20. Please wait for the next update after that. Other features will still work.
+Fork this repository to automatically build and sign the app with your own developer certificate. This gives you a permanent **OTA installation link** that stays up-to-date with the latest changes.
 
-## 📝 Requirements
+👉 **[Setup Guide](./Resources/Document/FORK_AUTOBUILD_GUIDE.md)**
 
-You need to figure it out by yourself :) But here are some tech notes:
+#### Option 2: Manual Install
 
-- [x] https://dantheman827.github.io/ios-app-signer/
+1.  Download the latest `.ipa` from [Releases](https://github.com/Lakr233/Asspp/releases).
+2.  Sign and install using your preferred tool (e.g., SideStore, AltStore, TrollStore, or other signing service).
 
-**If you encounter issues like [#1](https://github.com/Lakr233/Asspp/issues/1), please use the provided signing tool for installation.**
+### macOS
 
-### Local Installation
+1.  Download the latest `.zip` from [Releases](https://github.com/Lakr233/Asspp/releases).
+2.  Unzip and move `Asspp.app` to your Applications folder.
+3.  **First Run and Trusting the App (Recommended)**:
+    1.  Try double-clicking to open the app. If you see "App can’t be opened because the developer cannot be verified" or a similar message:
+        - In Finder, locate `Asspp.app`, **Control-click** (or right-click) the app and choose **Open**, then click **Open** again in the dialog. This will create a one-time trust exception for the app.
+    2.  If Control-clicking does not work or the app is still blocked:
+        - Open **System Settings** -> **Privacy & Security** (or System Preferences -> Security & Privacy on older macOS). In the General/Security section, look for the blocked app and click **Open Anyway** or **Allow**. You may need to enter an administrator password.
+    3.  Recommendation: Download from this repository's Releases and verify the release details to ensure the source is trusted before trusting and opening the app.
 
-**Advantages:**
+    > These steps follow macOS Gatekeeper practices and help minimize security risks while allowing you to run unsigned or self-signed apps.
 
-- Usable on a single device
-- Cannot be detected by the App Store
-- Cannot auto-update
+## 🛠 Requirements
 
-**Disadvantages:**
+- **iOS**: iOS 17.0 or later.
+- **macOS**: macOS 15.0 or later.
+- **Apple ID**: Required to communicate with App Store APIs.
 
-- Cannot be detected by the App Store 🤡
-- Cannot auto-update 🤡
-- Requires internet connection
+## 🚨 Special Notice
 
-### Using AirDrop for Installation
+Asspp utilizes the same underlying communication protocol as `ipatool`. According to community speculation (unverified), previous outages of this protocol were likely caused by:
+1. Widespread usage triggering Apple's risk control mechanisms.
+2. Protocol modifications following the patching of an iCloud security vulnerability.
+3. Adjustments to Apple's front-end gateways, which now enforce stricter traffic allocation and request validation.
 
-**Advantages:**
+Given the increasingly strict management of these APIs, **if the protocol becomes invalid again in the future, this project may not be able to provide further fixes.**
 
-- Compatible with the App Store
-- Can auto-update normally
+**⚠️ Important Security Warnings:**
+1. **Protect your GUID:** Please treat your device GUID as a highly sensitive password. Never share or leak it to anyone.
+2. **Do NOT use your primary Apple ID:** We strongly advise using a secondary or burner account with this tool. If your account is banned by Apple, it could potentially result in an unremovable Activation Lock on your device (while there are no confirmed cases of this happening yet, we cannot make any guarantees).
 
-**Disadvantages:**
+## ⚠️ Disclaimer
 
-- Requires two devices
-- The target device needs to be logged into the corresponding account and have at least one app installed with that account
+This project is for educational and research purposes only. It is not affiliated with Apple Inc. Use at your own risk.
 
-## 🚀 Usage
+## 🥰 Acknowledgments
 
-Download the latest version from [Releases](https://github.com/Lakr233/Asspp/releases).
+- [ipatool](https://github.com/majd/ipatool)
+- [ipatool-ios](https://github.com/dlevi309/ipatool-ios)
+- [localhost.direct](https://get.localhost.direct/)
 
-## Source Code
+_`ipatool-ios` and `localhost.direct` are no longer used in the project._
 
-1.2.10 is the only version that is open sourced. All future updates will not be open sourced.
+## 📄 License
 
-## 🧑‍⚖️ License
+MIT License. See [LICENSE](./LICENSE) for details.
 
-[GPLv3](./LICENSE)
+## Sponsor
 
-Yes, this is one of the few software programs I publish that is licensed under the GPL.
-
-## 🥰 Acknowledgements
-
-- [x] https://github.com/majd/ipatool
-- [x] https://github.com/dlevi309/ipatool-ios
-- [x] https://get.localhost.direct/
+[LookInside](https://lookinside-app.com/) helps you inspect a running iOS or macOS app UI from your Mac.
 
 ---
 
-Copyright © 2024 Lakr Aream. All Rights Reserved.
+Copyright © 2025 Lakr Aream. All Rights Reserved.
+
+<img src="./Artworks/fable5.jpg" alt="Fable 5 Verified" width="240">

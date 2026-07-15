@@ -90,10 +90,10 @@ extension Installer {
                         ],
                     ],
                     "metadata": [
-                        "bundle-identifier": archive.bundleIdentifier,
-                        "bundle-version": archive.version,
+                        "bundle-identifier": archive.software.bundleID,
+                        "bundle-version": archive.software.version,
                         "kind": "software",
-                        "title": archive.name,
+                        "title": archive.software.name,
                     ],
                 ],
             ],
@@ -104,7 +104,7 @@ extension Installer {
         (try? PropertyListSerialization.data(
             fromPropertyList: installManifest,
             format: .xml,
-            options: .zero
+            options: .zero,
         )) ?? .init()
     }
 }

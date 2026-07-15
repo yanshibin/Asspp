@@ -6,58 +6,94 @@
 //
 
 import ApplePackage
+import ButtonKit
 import SwiftUI
 
 struct AddAccountView: View {
-    @StateObject var vm = AppStore.this
-    @Environment(\.dismiss) var dismiss
+    @State private var vm = AppStore.this
+    @Environment(\.dismiss) private var dismiss
 
-    @State var email: String = ""
-    @State var password: String = ""
+    @State private var email: String = ""
+    @State private var password: String = ""
+    @State private var isPasswordHidden = true
 
-    @State var codeRequired: Bool = false
-    @State var code: String = ""
+    @State private var codeRequired: Bool = false
+    @State private var code: String = ""
 
-    @State var error: Error?
-    @State var openProgress: Bool = false
+    @State private var error: Error?
 
     var body: some View {
-        List {
+        Form {
             Section {
                 TextField("Email (Apple ID)", text: $email)
+                #if os(iOS)
                     .disableAutocorrection(true)
                     .autocapitalization(.none)
-                SecureField("Password", text: $password)
+                    .textContentType(.emailAddress)
+                    .keyboardType(.emailAddress)
+                #endif
+                if isPasswordHidden {
+                    SecureField("Password", text: $password)
+                    #if os(iOS)
+                        .textContentType(.password)
+                    #endif
+                } else {
+                    TextField(text: $password) {
+                        Text("Password")
+                            .font(.body)
+                    }
+                    #if os(iOS)
+                    .disableAutocorrection(true)
+                    .autocapitalization(.none)
+                    .textContentType(.password)
+                    #endif
+                    .font(.body.monospaced())
+                }
             } header: {
-                Text("ID")
+                HStack {
+                    Text("Apple ID")
+                    Spacer()
+                    Button(isPasswordHidden ? "Show Password" : "Hide Password") {
+                        isPasswordHidden.toggle()
+                    }
+                    .disabled(password.isEmpty)
+                }
             } footer: {
-                Text("We will store your account and password on disk without encryption. Please do not connect your device to untrusted hardware or use this app on a open system like macOS.")
+                Text("Your account is saved in your Keychain and will be synced across devices with the same iCloud account signed in.")
             }
             if codeRequired {
                 Section {
                     TextField("2FA Code (Optional)", text: $code)
+                    #if os(iOS)
                         .disableAutocorrection(true)
                         .autocapitalization(.none)
                         .keyboardType(.numberPad)
+                    #endif
                 } header: {
                     Text("2FA Code")
                 } footer: {
-                    Text("Although 2FA code is marked as optional, that is because we dont know if you have it or just incorrect password, you should provide it if you have it enabled.\n\nhttps://support.apple.com/102606")
+                    Text("Although the 2FA code is marked as optional, it's because we don't know if you have it enabled or just entered an incorrect password. Provide it if you have 2FA enabled.\n\nhttps://support.apple.com/102606")
                 }
                 .transition(.opacity)
             }
             Section {
-                if openProgress {
-                    ForEach([UUID()], id: \.self) { _ in
-                        ProgressView()
+                AsyncButton {
+                    logger.info("starting authentication for user")
+                    do {
+                        _ = try await vm.authenticate(email: email, password: password, code: code.isEmpty ? "" : code)
+                        logger.info("authentication successful for user")
+                        dismiss()
+                    } catch {
+                        logger.error("authentication failed: \(error.localizedDescription)")
+                        self.error = error
+                        codeRequired = true
+                        throw error
                     }
-                } else {
-                    Button("Authenticate") {
-                        authenticate()
-                    }
-                    .disabled(openProgress)
-                    .disabled(email.isEmpty || password.isEmpty)
+                } label: {
+                    Text("Authenticate")
                 }
+                .disabledWhenLoading()
+                .disabled(email.isEmpty || password.isEmpty)
             } footer: {
                 if let error {
                     Text(error.localizedDescription)
@@ -69,28 +105,12 @@ struct AddAccountView: View {
                 }
             }
         }
+        .formStyle(.grouped)
         .animation(.spring, value: codeRequired)
-        .listStyle(.insetGrouped)
-        .navigationTitle("Add Account")
-    }
-
-    func authenticate() {
-        openProgress = true
-        DispatchQueue.global().async {
-            defer { DispatchQueue.main.async { openProgress = false } }
-            let auth = ApplePackage.Authenticator(email: email)
-            do {
-                let account = try auth.authenticate(password: password, code: code.isEmpty ? nil : code)
-                DispatchQueue.main.async {
-                    vm.save(email: email, password: password, account: account)
-                    dismiss()
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    self.error = error
-                    codeRequired = true
-                }
-            }
-        }
+        #if os(iOS)
+            .listStyle(.insetGrouped)
+            .navigationBarTitleDisplayMode(.inline)
+        #endif
+            .navigationTitle("Add Account")
     }
 }

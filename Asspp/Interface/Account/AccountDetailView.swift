@@ -6,72 +6,77 @@
 //
 
 import ApplePackage
+import ButtonKit
 import SwiftUI
 
 struct AccountDetailView: View {
-    let account: AppStore.Account
+    let accountId: AppStore.UserAccount.ID
 
-    @StateObject var vm = AppStore.this
+    @State private var vm = AppStore.this
     @Environment(\.dismiss) var dismiss
 
-    @State var rotating = false
-    @State var rotatingHint = ""
+    private var account: AppStore.UserAccount? {
+        vm.accounts.first { $0.id == accountId }
+    }
+
+    @State private var rotatingHint = ""
 
     var body: some View {
-        List {
+        Form {
             Section {
-                if vm.demoMode {
-                    Text("88888888888")
-                        .redacted(reason: .placeholder)
-                } else {
-                    Text(account.email)
-                        .onTapGesture { UIPasteboard.general.string = account.email }
+                Button { copyToClipboard(account?.account.email) } label: {
+                    Text(account?.account.email ?? "")
                 }
+                .foregroundStyle(.primary)
+                .redacted(reason: .placeholder, isEnabled: vm.demoMode)
             } header: {
-                Text("ID")
+                Text("Apple ID")
             } footer: {
                 Text("This email is used to sign in to Apple services.")
             }
             Section {
-                Text("\(account.countryCode) - \(ApplePackage.countryCodeMap[account.countryCode] ?? NSLocalizedString("Unknown", comment: ""))")
-                    .onTapGesture { UIPasteboard.general.string = account.email }
+                Button { copyToClipboard(account?.account.store) } label: {
+                    Text("\(account?.account.store ?? "") - \(ApplePackage.Configuration.countryCode(for: account?.account.store ?? "") ?? "Unknown")")
+                }
+                .foregroundStyle(.primary)
             } header: {
                 Text("Country Code")
             } footer: {
                 Text("App Store requires this country code to identify your package region.")
             }
             Section {
-                if vm.demoMode {
-                    Text("88888888888")
-                        .redacted(reason: .placeholder)
-                } else {
-                    Text(account.storeResponse.directoryServicesIdentifier)
+                Button { copyToClipboard(account?.account.directoryServicesIdentifier) } label: {
+                    Text(account?.account.directoryServicesIdentifier ?? "")
                         .font(.system(.body, design: .monospaced))
-                        .onTapGesture { UIPasteboard.general.string = account.email }
                 }
-                Text(ApplePackage.overrideGUID ?? "Seed Not Available")
-                    .font(.system(.body, design: .monospaced))
-                    .onTapGesture { UIPasteboard.general.string = account.email }
+                .foregroundStyle(.primary)
+                .redacted(reason: .placeholder, isEnabled: vm.demoMode)
             } header: {
-                Text("Services ID")
+                Text("Directory Services ID")
             } footer: {
-                Text("ID combined with a random seed generated on this device can download package from App Store.")
+                Text("This ID, combined with a random seed generated on this device, can be used to download packages from the App Store.")
             }
             Section {
-                SecureField(text: .constant(account.storeResponse.passwordToken)) {
+                SecureField(text: .constant(account?.account.passwordToken ?? "")) {
                     Text("Password Token")
                 }
-                if rotating {
-                    Button("Rotating...") {}
-                        .disabled(true)
-                } else {
-                    Button("Rotate Token") { rotate() }
+                AsyncButton {
+                    do {
+                        try await vm.rotate(id: account?.id ?? "")
+                        rotatingHint = String(localized: "Success")
+                    } catch {
+                        rotatingHint = error.localizedDescription
+                        throw error
+                    }
+                } label: {
+                    Text("Rotate Token")
                 }
+                .disabledWhenLoading()
             } header: {
                 Text("Password Token")
             } footer: {
                 if rotatingHint.isEmpty {
-                    Text("If you failed to acquire license for product, rotate the password token may help. This will use the initial password to authenticate with App Store again.")
+                    Text("If you fail to acquire a license for a product, rotating the password token may help. This will use the initial password to authenticate with the App Store again.")
                 } else {
                     Text(rotatingHint)
                         .foregroundStyle(.red)
@@ -79,30 +84,13 @@ struct AccountDetailView: View {
             }
             Section {
                 Button("Delete") {
-                    vm.delete(id: account.id)
+                    vm.delete(id: account?.id ?? "")
                     dismiss()
                 }
                 .foregroundStyle(.red)
             }
         }
-        .navigationTitle("Detail")
-    }
-
-    func rotate() {
-        rotating = true
-        DispatchQueue.global().async {
-            do {
-                try vm.rotate(id: account.id)
-                DispatchQueue.main.async {
-                    rotating = false
-                    rotatingHint = NSLocalizedString("Success", comment: "")
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    rotating = false
-                    rotatingHint = error.localizedDescription
-                }
-            }
-        }
+        .formStyle(.grouped)
+        .navigationTitle("Account Details")
     }
 }

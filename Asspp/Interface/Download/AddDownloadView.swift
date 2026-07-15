@@ -6,34 +6,36 @@
 //
 
 import ApplePackage
+import ButtonKit
 import SwiftUI
 
 struct AddDownloadView: View {
-    @State var bundleID: String = ""
-    @State var searchType: EntityType = .iPhone
-    @State var selection: AppStore.Account.ID = .init()
-    @State var obtainDownloadURL = false
-    @State var hint = ""
+    @State private var bundleID: String = ""
+    @State private var searchType: EntityType = .iPhone
+    @State private var selection: AppStore.UserAccount.ID = .init()
+    @State private var hint = ""
+    @State private var hintIsError = false
 
-    @FocusState var searchKeyFocused
+    @FocusState private var searchKeyFocused
 
-    @StateObject var avm = AppStore.this
-    @StateObject var dvm = Downloads.this
+    @State private var avm = AppStore.this
+    @State private var dvm = Downloads.this
 
-    @Environment(\.dismiss) var dismiss
+    @Environment(\.dismiss) private var dismiss
 
-    var account: AppStore.Account? {
+    var account: AppStore.UserAccount? {
         avm.accounts.first { $0.id == selection }
     }
 
     var body: some View {
-        List {
+        Form {
             Section {
                 TextField("Bundle ID", text: $bundleID)
+                #if os(iOS)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.none)
+                #endif
                     .focused($searchKeyFocused)
-                    .onSubmit { startDownload() }
                 Picker("EntityType", selection: $searchType) {
                     ForEach(EntityType.allCases, id: \.self) { type in
                         Text(type.rawValue)
@@ -44,23 +46,19 @@ struct AddDownloadView: View {
             } header: {
                 Text("Bundle ID")
             } footer: {
-                Text("Tell us the bundle ID of the app to initial a direct download. Useful to download apps that are no longer available in App Store.")
+                Text("Tell us the bundle ID of the app to initiate a direct download. Useful to download apps that are no longer available in App Store.")
             }
 
             Section {
-                if avm.demoMode {
-                    Text("Demo Mode Redacted")
-                        .redacted(reason: .placeholder)
-                } else {
-                    Picker("Account", selection: $selection) {
-                        ForEach(avm.accounts) { account in
-                            Text(account.email)
-                                .id(account.id)
-                        }
+                Picker("Account", selection: $selection) {
+                    ForEach(avm.accounts) { account in
+                        Text(account.account.email)
+                            .id(account.id)
                     }
-                    .pickerStyle(.menu)
-                    .onAppear { selection = avm.accounts.first?.id ?? .init() }
                 }
+                .pickerStyle(.menu)
+                .onAppear { selection = avm.accounts.first?.id ?? .init() }
+                .redacted(reason: .placeholder, isEnabled: avm.demoMode)
             } header: {
                 Text("Account")
             } footer: {
@@ -68,70 +66,37 @@ struct AddDownloadView: View {
             }
 
             Section {
-                Button(obtainDownloadURL ? "Communicating with Apple..." : "Request Download") {
-                    startDownload()
+                AsyncButton {
+                    guard let account else { return }
+                    searchKeyFocused = false
+                    do {
+                        guard let countryCode = ApplePackage.Configuration.countryCode(for: account.account.store) else { return }
+                        let software = try await ApplePackage.Lookup.lookup(bundleID: bundleID, countryCode: countryCode)
+                        let appPackage = AppStore.AppPackage(software: software)
+                        try await dvm.startDownload(for: appPackage, accountID: account.id)
+                        hint = String(localized: "Download Requested")
+                        hintIsError = false
+                    } catch {
+                        hint = error.localizedDescription
+                        hintIsError = true
+                        throw error
+                    }
+                } label: {
+                    Text("Request Download")
                 }
+                .disabledWhenLoading()
                 .disabled(bundleID.isEmpty)
-                .disabled(obtainDownloadURL)
                 .disabled(account == nil)
             } footer: {
                 if hint.isEmpty {
-                    Text("Package can be installed later in download page.")
+                    Text("The package can be installed later from the Downloads page.")
                 } else {
                     Text(hint)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(hintIsError ? .red : .secondary)
                 }
             }
         }
+        .formStyle(.grouped)
         .navigationTitle("Direct Download")
-    }
-
-    func startDownload() {
-        guard let account else { return }
-        searchKeyFocused = false
-        obtainDownloadURL = true
-        DispatchQueue.global().async {
-            let httpClient = HTTPClient(urlSession: URLSession.shared)
-            let itunesClient = iTunesClient(httpClient: httpClient)
-            let storeClient = StoreClient(httpClient: httpClient)
-
-            do {
-                let app = try itunesClient.lookup(
-                    type: searchType,
-                    bundleIdentifier: bundleID,
-                    region: account.countryCode
-                )
-                let item = try storeClient.item(
-                    identifier: String(app.identifier),
-                    directoryServicesIdentifier: account.storeResponse.directoryServicesIdentifier
-                )
-                let id = Downloads.this.add(request: .init(
-                    account: account,
-                    package: app,
-                    item: item
-                ))
-                Downloads.this.resume(requestID: id)
-            } catch {
-                DispatchQueue.main.async {
-                    obtainDownloadURL = false
-                    if (error as NSError).code == 9610 {
-                        hint = NSLocalizedString("License Not Found, please acquire license first.", comment: "")
-                    } else if (error as NSError).code == 2034 {
-                        hint = NSLocalizedString("Password Token Expired, please re-authenticate within account page.", comment: "")
-                    } else if (error as NSError).code == 2059 {
-                        hint = NSLocalizedString("Temporarily Unavailable, please try again later.", comment: "")
-                    } else {
-                        hint = NSLocalizedString("Unable to retrieve download url, please try again later.", comment: "") + "\n" + error.localizedDescription
-                    }
-                }
-                return
-            }
-            DispatchQueue.main.async {
-                hint = NSLocalizedString("Download Requested", comment: "")
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                dismiss()
-            }
-        }
     }
 }

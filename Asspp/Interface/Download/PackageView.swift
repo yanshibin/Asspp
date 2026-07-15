@@ -6,117 +6,175 @@
 //
 
 import ApplePackage
+import ButtonKit
 import Kingfisher
 import SwiftUI
 
+#if canImport(AppKit) && !canImport(UIKit)
+    import AppKit
+#endif
+
 struct PackageView: View {
-    let request: Downloads.Request
-    var archive: iTunesResponse.iTunesArchive {
-        request.package
+    @State var pkg: PackageManifest
+
+    var archive: AppStore.AppPackage {
+        pkg.package
     }
 
-    var url: URL { request.targetLocation }
+    var url: URL {
+        pkg.targetLocation
+    }
 
     @Environment(\.dismiss) var dismiss
-    @State var installer: Installer?
-    @State var error: String = ""
+    #if os(iOS)
+        @State private var installer: Installer?
+        @State private var error: String = ""
+    #endif
+    #if os(macOS)
+        @State private var copied = false
+    #endif
 
-    @StateObject var vm = AppStore.this
+    @State private var vm = AppStore.this
+    @State private var downloads = Downloads.this
 
     var body: some View {
-        List {
+        Form {
             Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    KFImage(URL(string: archive.artworkUrl512 ?? ""))
-                        .antialiased(true)
-                        .resizable()
-                        .cornerRadius(8)
-                        .frame(width: 50, height: 50, alignment: .center)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text(archive.name)
-                        .bold()
-                }
-                .padding(.vertical, 4)
+                ArchivePreviewView(archive: archive)
             } header: {
                 Text("Package")
-            } footer: {
-                Text("\(archive.bundleIdentifier) - \(archive.version) - \(archive.byteCountDescription)")
             }
 
-            if Downloads.this.isCompleted(for: request) {
-                Section {
-                    Button("Install") {
-                        do {
-                            installer = try Installer(archive: archive, path: url)
-                        } catch {
-                            self.error = error.localizedDescription
+            Section {
+                CopyableRow(label: "Bundle ID", value: archive.software.bundleID, monospaced: true)
+                Text("Version")
+                    .badge(archive.software.version)
+                Text("Developer")
+                    .badge(archive.software.sellerName)
+                if !archive.software.primaryGenreName.isEmpty {
+                    Text("Category")
+                        .badge(archive.software.primaryGenreName)
+                }
+                Text("Compatibility")
+                    .badge("\(archive.software.minimumOsVersion)+")
+                if archive.software.userRatingCount > 0 {
+                    Text("Rating")
+                        .badge("\(String(format: "%.1f", archive.software.averageUserRating)) (\(archive.software.userRatingCount))")
+                }
+            } header: {
+                Text("Details")
+            }
+
+            if pkg.completed {
+                #if os(macOS)
+                    DeviceCTLInstallSection(package: pkg)
+                #endif
+                #if os(iOS)
+                    Section {
+                        AsyncButton {
+                            installer = try await Installer(archive: archive, path: url)
+                        } label: {
+                            Text("Install")
+                        }
+                        .disabledWhenLoading()
+                        .sheet(item: $installer) {
+                            installer?.destroy()
+                            installer = nil
+                        } content: {
+                            InstallerView(installer: $0)
+                        }
+
+                        Button("Install via AirDrop") {
+                            let newUrl = temporaryDirectory
+                                .appendingPathComponent("\(archive.software.bundleID)-\(archive.software.version)")
+                                .appendingPathExtension("ipa")
+                            try? FileManager.default.removeItem(at: newUrl)
+                            try? FileManager.default.copyItem(at: url, to: newUrl)
+                            AirDrop(items: [newUrl])
+                        }
+                    } header: {
+                        Text("Control")
+                    } footer: {
+                        if error.isEmpty {
+                            Text("Direct install may have limitations that cannot be bypassed. Use AirDrop if possible on another device.")
+                        } else {
+                            Text(error)
+                                .foregroundStyle(.red)
                         }
                     }
-                    .sheet(item: $installer) {
-                        installer?.destroy()
-                        installer = nil
-                    } content: {
-                        InstallerView(installer: $0)
-                    }
+                #endif
 
-                    Button("Install via AirDrop") {
-                        let newUrl = temporaryDirectory
-                            .appendingPathComponent("\(archive.bundleIdentifier)-\(archive.version)")
-                            .appendingPathExtension("ipa")
-                        try? FileManager.default.removeItem(at: newUrl)
-                        try? FileManager.default.copyItem(at: url, to: newUrl)
-                        share(items: [newUrl])
+                Section {
+                    NavigationLink("Content Viewer") {
+                        FileListView(packageURL: pkg.targetLocation)
                     }
+                    #if os(macOS)
+                        HStack {
+                            Button {
+                                NSWorkspace.shared.activateFileViewerSelecting([url])
+                            } label: {
+                                Text(url.path)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            .help("Show in Finder")
+                            .buttonStyle(.borderless)
+                            .tint(.accentColor)
+                            Spacer()
+                            Button {
+                                let pasteboard = NSPasteboard.general
+                                pasteboard.clearContents()
+                                pasteboard.setString(url.path, forType: .string)
+                                copied = true
+                                Task { @MainActor in
+                                    try? await Task.sleep(for: .seconds(1))
+                                    copied = false
+                                }
+                            } label: {
+                                Image(systemName: copied ? "checkmark" : "document.on.document")
+                                    .contentTransition(.symbolEffect(.replace))
+                            }
+                            .help("Copy File Path")
+                            .buttonStyle(.borderless)
+                            .tint(.accentColor)
+                        }
+                    #endif
                 } header: {
-                    Text("Control")
+                    Text("Analysis")
                 } footer: {
-                    if error.isEmpty {
-                        Text("Direct install may have limitations that is not able to bypass. Use AirDrop method if possible on another device.")
-                    } else {
-                        Text(error)
-                            .foregroundStyle(.red)
-                    }
+                    Text("Developer options.")
                 }
             } else {
                 Section {
-                    switch request.runtime.status {
-                    case .stopped:
-                        Button("Continue Download") {
-                            Downloads.this.resume(requestID: request.id)
+                    let actions = downloads.getAvailableActions(for: pkg)
+                    ForEach(actions.filter { $0 != .delete }, id: \.self) { action in
+                        let label = downloads.getActionLabel(for: action)
+                        Button(label.title) {
+                            downloads.performDownloadAction(for: pkg, action: action)
                         }
-                    case .downloading,
-                         .pending:
-                        Text("Download In Progress...")
-                    case .verifying:
-                        Text("Verification In Progress...")
-                    case .completed:
-                        Group {}
+                        .foregroundStyle(label.isDestructive ? .red : .primary)
                     }
                 } header: {
                     Text("Incomplete Package")
                 } footer: {
-                    switch request.runtime.status {
-                    case .stopped:
-                        Text("Either connection is lost or the download is interrupted. Tap to continue.")
-                    case .downloading,
-                         .pending:
-                        Text("\(Int(request.runtime.percent * 100))%...")
-                    case .verifying:
-                        Text("\(Int(request.runtime.percent * 100))%...")
+                    switch pkg.state.status {
+                    case .pending:
+                        Text("\(Int(pkg.state.percent * 100))%...")
+                    case .downloading:
+                        Text("\(Int(pkg.state.percent * 100))%...")
+                    case .paused:
+                        Text("Paused at \(Int(pkg.state.percent * 100))%")
                     case .completed:
                         Group {}
+                    case .failed:
+                        Text("Download failed.")
                     }
                 }
             }
 
             Section {
-                if vm.demoMode {
-                    Text("88888888888")
-                        .redacted(reason: .placeholder)
-                } else {
-                    Text(request.account.email)
-                }
-                Text("\(request.account.countryCode) - \(ApplePackage.countryCodeMap[request.account.countryCode] ?? "-1")")
+                Text(pkg.account.account.email)
+                    .redacted(reason: .placeholder, isEnabled: vm.demoMode)
+                Text("\(pkg.account.account.store) - \(ApplePackage.Configuration.countryCode(for: pkg.account.account.store) ?? String(localized: "Unknown"))")
             } header: {
                 Text("Account")
             } footer: {
@@ -124,104 +182,20 @@ struct PackageView: View {
             }
 
             Section {
-                Button("Delete") {
-                    Downloads.this.delete(request: request)
+                let deleteAction = DownloadAction.delete
+                let label = downloads.getActionLabel(for: deleteAction)
+                Button(label.title) {
+                    Task { downloads.performDownloadAction(for: pkg, action: deleteAction) }
                     dismiss()
                 }
-                .foregroundStyle(.red)
+                .foregroundStyle(label.isDestructive ? .red : .primary)
             } header: {
                 Text("Danger Zone")
             } footer: {
                 Text(url.path)
             }
         }
-        .navigationTitle(request.package.name)
-    }
-
-    @discardableResult
-    func share(
-        items: [Any],
-        excludedActivityTypes: [UIActivity.ActivityType]? = nil
-    ) -> Bool {
-        guard let source = UIWindow.mainWindow?.rootViewController?.topMostController else {
-            return false
-        }
-        let newView = UIView()
-        source.view.addSubview(newView)
-        newView.frame = .init(origin: .zero, size: .init(width: 10, height: 10))
-        newView.center = .init(
-            x: source.view.bounds.width / 2 - 5,
-            y: source.view.bounds.height / 2 - 5
-        )
-        let vc = UIActivityViewController(
-            activityItems: items,
-            applicationActivities: nil
-        )
-        vc.excludedActivityTypes = excludedActivityTypes
-        vc.popoverPresentationController?.sourceView = source.view
-        vc.popoverPresentationController?.sourceRect = newView.frame
-        source.present(vc, animated: true) {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                newView.removeFromSuperview()
-            }
-        }
-        return true
-    }
-}
-
-extension UIWindow {
-    static var mainWindow: UIWindow? {
-        if let keyWindow = UIApplication
-            .shared
-            .value(forKey: "keyWindow") as? UIWindow
-        {
-            return keyWindow
-        }
-        // if apple remove this shit, we fall back to ugly solution
-        let keyWindow = UIApplication
-            .shared
-            .connectedScenes
-            .filter { $0.activationState == .foregroundActive }
-            .compactMap { $0 as? UIWindowScene }
-            .first?
-            .windows
-            .filter(\.isKeyWindow)
-            .first
-        return keyWindow
-    }
-}
-
-extension UIViewController {
-    var topMostController: UIViewController? {
-        var result: UIViewController? = self
-        while true {
-            if let next = result?.presentedViewController,
-               !next.isBeingDismissed,
-               next as? UISearchController == nil
-            {
-                result = next
-                continue
-            }
-            if let tabBar = result as? UITabBarController,
-               let next = tabBar.selectedViewController
-            {
-                result = next
-                continue
-            }
-            if let split = result as? UISplitViewController,
-               let next = split.viewControllers.last
-            {
-                result = next
-                continue
-            }
-            if let navigator = result as? UINavigationController,
-               let next = navigator.viewControllers.last
-            {
-                result = next
-                continue
-            }
-            break
-        }
-        return result
+        .formStyle(.grouped)
+        .navigationTitle(pkg.package.software.name)
     }
 }

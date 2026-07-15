@@ -9,6 +9,8 @@ import ColorfulX
 import SwiftUI
 
 struct WelcomeView: View {
+    @State var openInstruction: Bool = false
+
     var body: some View {
         ZStack {
             VStack(spacing: 32) {
@@ -16,18 +18,29 @@ struct WelcomeView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 80, height: 80)
+
                 Text("Welcome to Asspp")
                     .font(.system(.headline, design: .rounded))
-                inst
-                    .font(.system(.footnote, design: .rounded))
-                    .padding(.horizontal, 32)
+
                 Spacer().frame(height: 0)
             }
 
             VStack(spacing: 16) {
                 Spacer()
-                Text(appVersion)
-                Text("App Store itself is unstable, retry if needed.")
+                HStack(spacing: 8) {
+                    Text(version)
+                    Button {
+                        openInstruction = true
+                    } label: {
+                        Image(systemName: "questionmark.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .popover(isPresented: $openInstruction) {
+                        SimpleInstruction()
+                            .padding(32)
+                    }
+                }
+                Text("The App Store API can be unstable. Retry if an error occurs.")
             }
             .font(.footnote)
             .foregroundStyle(.secondary)
@@ -35,37 +48,12 @@ struct WelcomeView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
-            ColorfulView(color: .constant(ColorfulPreset.winter.colors))
+            ColorfulView(color: .constant(.winter))
                 .opacity(0.25)
-                .ignoresSafeArea()
+                .ignoresSafeArea(),
         )
-    }
-
-    var inst: some View {
-        VStack(spacing: 16) {
-            HStack {
-                Image(systemName: "1.circle.fill")
-                Text("Sign in to your account.")
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            HStack {
-                Image(systemName: "2.circle.fill")
-                Text("Search for apps you want to install.")
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            HStack {
-                Image(systemName: "3.circle.fill")
-                Text("Download and save the ipa file.")
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            HStack {
-                Image(systemName: "4.circle.fill")
-                Text("Install or AirDrop to install.")
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
+        #if os(macOS)
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        #endif
     }
 }

@@ -11,17 +11,25 @@ import NIOTLS
 import Vapor
 
 extension Installer {
-    static let sni = "app.localhost.direct"
+    static let sni = "app.localhost.qaq.wiki"
     static let pem = Bundle.main.url(
-        forResource: "localhost.direct",
+        forResource: "localhost.qaq.wiki-key",
         withExtension: "pem",
-        subdirectory: "Certificates/localhost.direct"
+        subdirectory: "Certificates/localhost.qaq.wiki",
     )
     static let crt = Bundle.main.url(
-        forResource: "localhost.direct",
-        withExtension: "crt",
-        subdirectory: "Certificates/localhost.direct"
+        forResource: "localhost.qaq.wiki",
+        withExtension: "pem",
+        subdirectory: "Certificates/localhost.qaq.wiki",
     )
+    static let ca = Bundle.main.url(
+        forResource: "rootCA",
+        withExtension: "pem",
+        subdirectory: "Certificates/localhost.qaq.wiki",
+    )!
+
+    static var caURL: URL = .init(fileURLWithPath: "/tmp/")
+    static var caInstaller: Installer?
 
     static func setupTLS() throws -> TLSConfiguration {
         guard let crt, let pem else {
@@ -33,7 +41,7 @@ extension Installer {
             certificateChain: NIOSSLCertificate
                 .fromPEMFile(crt.path)
                 .map { NIOSSLCertificateSource.certificate($0) },
-            privateKey: .file(pem.path)
+            privateKey: NIOSSLPrivateKeySource.privateKey(NIOSSLPrivateKey(file: pem.path, format: .pem)),
         )
     }
 }
